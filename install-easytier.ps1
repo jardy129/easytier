@@ -1,6 +1,19 @@
 #requires -version 5.1
 param(
-    [switch]$Help
+    [switch]$Help,
+    [switch]$Uninstall,
+    [switch]$Yes,
+    [string]$Target = "",
+    [string]$InstallDir = "",
+    [string]$Version = "",
+    [string]$Username = "",
+    [string]$Domain = "",
+    [string]$Port = "",
+    [string]$Hostname = "",
+    [string]$WebPort = "",
+    [string]$Protocol = "",
+    [switch]$NoWeb,
+    [switch]$NoCore
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +36,8 @@ function Show-Help {
     @"
 Usage:
   powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1
+  powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1 -Yes -Target Windows -Username jardy -Domain 192.168.2.2 -Port 22020 -Hostname WinNode
+  powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1 -Yes -Uninstall
 
 This script installs EasyTier Core and EasyTier Web Embed as Windows services.
 "@ | Write-Host
@@ -62,9 +77,10 @@ function Main-Menu {
         Write-Host "1) Mac"
         Write-Host "2) Linux"
         Write-Host "3) Windows"
-        Write-Host "4) Exit"
+        Write-Host "4) Thorough uninstall on this machine"
+        Write-Host "5) Exit"
         Write-Host "========================================"
-        $choice = Read-Host "Choose target system [1-4]"
+        $choice = Read-Host "Choose option [1-5]"
         switch ($choice) {
             "1" {
                 Write-Warn "Mac installation should be run on macOS:"
@@ -77,7 +93,11 @@ function Main-Menu {
                 exit 0
             }
             "3" { return }
-            "4" { exit 0 }
+            "4" {
+                $script:Uninstall = $true
+                return
+            }
+            "5" { exit 0 }
             default { Write-Warn "Invalid option." }
         }
     }
@@ -99,6 +119,26 @@ function Stop-RemoveService($Name) {
         sc.exe delete $Name | Out-Null
         Start-Sleep -Seconds 1
     }
+}
+
+function Uninstall-EasyTier {
+    if ([string]::IsNullOrWhiteSpace($InstallDir)) { $InstallDir = "C:\easytier" }
+
+    if (-not $Yes) {
+        $InstallDir = Prompt-Default "Install directory to delete" $InstallDir
+        if (-not (Prompt-YesNo "Confirm full uninstall and delete $InstallDir ?" "n")) {
+            Write-Warn "Uninstall cancelled."
+            exit 0
+        }
+    }
+
+    Write-Info "Stopping and deleting Windows EasyTier services..."
+    Stop-RemoveService $CoreService
+    Stop-RemoveService $WebService
+
+    Write-Info "Deleting $InstallDir..."
+    Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Success "EasyTier has been fully uninstalled from Windows."
 }
 
 function Quote-Arg($Value) {
@@ -137,73 +177,88 @@ function Download-Install($Version, $Platform, $InstallDir, $InstallCore, $Insta
 
 function Install-EasyTier {
     $platform = Get-WindowsPlatform
-    $installDir = Prompt-Default "Install directory" "C:\easytier"
-    $version = Prompt-Default "EasyTier version" $DefaultVersion
-    $username = Prompt-Default "Username" $DefaultUsername
-    $domain = Prompt-Default "Config server domain/IP, without udp:// and without /username" $DefaultDomain
-    $port = Prompt-Default "Config server port" $DefaultPort
-    $hostnameValue = Prompt-Default "Hostname" $env:COMPUTERNAME
-    $webPort = Prompt-Default "Web/API port" $DefaultWebPort
-    $protocol = Prompt-Default "Config server protocol" $DefaultProtocol
-    $installWeb = Prompt-YesNo "Install easytier-web-embed service?" "y"
-    $installCore = Prompt-YesNo "Install easytier-core service?" "y"
+    if ($Yes) {
+        if ([string]::IsNullOrWhiteSpace($InstallDir)) { $InstallDir = "C:\easytier" }
+        if ([string]::IsNullOrWhiteSpace($Version)) { $Version = $DefaultVersion }
+        if ([string]::IsNullOrWhiteSpace($Username)) { $Username = $DefaultUsername }
+        if ([string]::IsNullOrWhiteSpace($Domain)) { $Domain = $DefaultDomain }
+        if ([string]::IsNullOrWhiteSpace($Port)) { $Port = $DefaultPort }
+        if ([string]::IsNullOrWhiteSpace($Hostname)) { $Hostname = $env:COMPUTERNAME }
+        if ([string]::IsNullOrWhiteSpace($WebPort)) { $WebPort = $DefaultWebPort }
+        if ([string]::IsNullOrWhiteSpace($Protocol)) { $Protocol = $DefaultProtocol }
+        $installWeb = -not $NoWeb
+        $installCore = -not $NoCore
+    } else {
+        $InstallDir = Prompt-Default "Install directory" "C:\easytier"
+        $Version = Prompt-Default "EasyTier version" $DefaultVersion
+        $Username = Prompt-Default "Username" $DefaultUsername
+        $Domain = Prompt-Default "Config server domain/IP, without udp:// and without /username" $DefaultDomain
+        $Port = Prompt-Default "Config server port" $DefaultPort
+        $Hostname = Prompt-Default "Hostname" $env:COMPUTERNAME
+        $WebPort = Prompt-Default "Web/API port" $DefaultWebPort
+        $Protocol = Prompt-Default "Config server protocol" $DefaultProtocol
+        $installWeb = Prompt-YesNo "Install easytier-web-embed service?" "y"
+        $installCore = Prompt-YesNo "Install easytier-core service?" "y"
+    }
 
     if (-not $installWeb -and -not $installCore) {
         throw "Nothing selected to install."
     }
 
-    $asset = "easytier-windows-$platform-v$version.zip"
-    $configServer = "${protocol}://${domain}:${port}/${username}"
-    $webApiHost = "http://127.0.0.1:$webPort"
+    $asset = "easytier-windows-$platform-v$Version.zip"
+    $configServer = "${Protocol}://${Domain}:${Port}/${Username}"
+    $webApiHost = "http://127.0.0.1:$WebPort"
 
     Write-Host ""
     Write-Host "========== Confirm Installation =========="
     Write-Host "Target OS:          windows"
     Write-Host "Architecture:       $platform"
     Write-Host "Download package:   $asset"
-    Write-Host "Install directory:  $installDir"
-    Write-Host "Username:           $username"
+    Write-Host "Install directory:  $InstallDir"
+    Write-Host "Username:           $Username"
     Write-Host "Config server:      $configServer"
-    Write-Host "Hostname:           $hostnameValue"
-    Write-Host "Web/API port:       $webPort"
+    Write-Host "Hostname:           $Hostname"
+    Write-Host "Web/API port:       $WebPort"
     Write-Host "Web API host:       $webApiHost"
     Write-Host "Install Web Embed:  $installWeb"
     Write-Host "Install Core:       $installCore"
     Write-Host "=========================================="
     Write-Host ""
 
-    if (-not (Prompt-YesNo "Confirm and start installation?" "n")) {
-        Write-Warn "Installation cancelled."
-        exit 0
+    if (-not $Yes) {
+        if (-not (Prompt-YesNo "Confirm and start installation?" "n")) {
+            Write-Warn "Installation cancelled."
+            exit 0
+        }
     }
 
     Stop-RemoveService $CoreService
     Stop-RemoveService $WebService
-    Download-Install -Version $version -Platform $platform -InstallDir $installDir -InstallCore:$installCore -InstallWeb:$installWeb
+    Download-Install -Version $Version -Platform $platform -InstallDir $InstallDir -InstallCore:$installCore -InstallWeb:$installWeb
 
     if ($installWeb) {
-        $webExe = Join-Path $installDir "easytier-web-embed.exe"
-        $dbPath = Join-Path $installDir "et.db"
+        $webExe = Join-Path $InstallDir "easytier-web-embed.exe"
+        $dbPath = Join-Path $InstallDir "et.db"
         $webArgs = @(
             Quote-Arg $webExe,
             "--db", Quote-Arg $dbPath,
-            "--api-server-port", $webPort,
+            "--api-server-port", $WebPort,
             "--api-server-addr", "0.0.0.0",
             "--api-host", Quote-Arg $webApiHost,
-            "--config-server-port", $port,
-            "--config-server-protocol", $protocol
+            "--config-server-port", $Port,
+            "--config-server-protocol", $Protocol
         ) -join " "
         New-Service -Name $WebService -BinaryPathName $webArgs -DisplayName "EasyTier Web Embed" -StartupType Automatic | Out-Null
         Start-Service -Name $WebService
     }
 
     if ($installCore) {
-        $coreExe = Join-Path $installDir "easytier-core.exe"
+        $coreExe = Join-Path $InstallDir "easytier-core.exe"
         $coreArgs = @(
             Quote-Arg $coreExe,
             "--config-server", Quote-Arg $configServer,
-            "--hostname", Quote-Arg $hostnameValue,
-            "--machine-id", Quote-Arg $hostnameValue
+            "--hostname", Quote-Arg $Hostname,
+            "--machine-id", Quote-Arg $Hostname
         ) -join " "
         New-Service -Name $CoreService -BinaryPathName $coreArgs -DisplayName "EasyTier Core" -StartupType Automatic | Out-Null
         Start-Service -Name $CoreService
@@ -220,5 +275,17 @@ if ($Help) {
 }
 
 Assert-Admin
-Main-Menu
-Install-EasyTier
+if ($Yes) {
+    if (-not [string]::IsNullOrWhiteSpace($Target) -and $Target -notmatch "^(Windows|windows|win)$") {
+        Write-Fail "This PowerShell installer only supports Windows. Use install-easytier.sh for macOS/Linux."
+        exit 1
+    }
+} else {
+    Main-Menu
+}
+
+if ($Uninstall) {
+    Uninstall-EasyTier
+} else {
+    Install-EasyTier
+}

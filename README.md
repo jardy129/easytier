@@ -12,13 +12,56 @@ Run on the target machine:
 sudo ./install-easytier.sh
 ```
 
+Unattended Linux example:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.sh | sudo bash -s -- \
+  --yes \
+  --target linux \
+  --username jardy \
+  --domain 192.168.2.2 \
+  --port 22020 \
+  --hostname pve
+```
+
+Unattended Linux full uninstall:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.sh | sudo bash -s -- \
+  --yes \
+  --target linux \
+  --uninstall
+```
+
+Unattended macOS example:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.sh | sudo bash -s -- \
+  --yes \
+  --target macos \
+  --username jardy \
+  --domain 192.168.2.2 \
+  --port 22020 \
+  --hostname MacBook-Mini
+```
+
+Unattended macOS full uninstall:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.sh | sudo bash -s -- \
+  --yes \
+  --target macos \
+  --uninstall
+```
+
 The script starts with this menu:
 
 ```text
 1) Mac
 2) Linux
 3) Windows
-4) Exit
+4) Thorough uninstall on this machine
+5) Exit
 ```
 
 For macOS and Linux it will:
@@ -46,6 +89,18 @@ Run PowerShell as Administrator:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1
+```
+
+Unattended Windows example:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.ps1 -OutFile $env:TEMP\install-easytier.ps1; & $env:TEMP\install-easytier.ps1 -Yes -Target Windows -Username jardy -Domain 192.168.2.2 -Port 22020 -Hostname WinNode"
+```
+
+Unattended Windows full uninstall:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.ps1 -OutFile $env:TEMP\install-easytier.ps1; & $env:TEMP\install-easytier.ps1 -Yes -Uninstall"
 ```
 
 The Windows script uses the same menu and confirmation flow. It detects `x86_64`, `arm64`, or `i686`, downloads the matching Windows zip, and installs Windows services.

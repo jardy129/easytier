@@ -21,6 +21,7 @@ DEFAULT_PROTOCOL="udp"
 
 OS_CHOICE=""
 OS_NAME=""
+ACTION="install"
 PLATFORM=""
 VERSION=""
 INSTALL_DIR=""
@@ -32,16 +33,99 @@ WEB_PORT=""
 CONFIG_PROTOCOL=""
 INSTALL_WEB="yes"
 INSTALL_CORE="yes"
+AUTO_YES="no"
 
 usage() {
   cat <<EOF
 Usage:
   sudo ./install-easytier.sh
-  sudo ./install-easytier.sh --uninstall
+  sudo ./install-easytier.sh --yes --target linux --username jardy --domain 192.168.2.2 --port 22020 --hostname pve
+  sudo ./install-easytier.sh --yes --target macos --username jardy --domain jardy.top --port 22020 --hostname MacBook-Mini
+  sudo ./install-easytier.sh --yes --target linux --uninstall
 
 This script installs EasyTier Core and EasyTier Web Embed on macOS or Linux.
 For Windows, use install-easytier.ps1 in Administrator PowerShell.
+
+Options:
+  --yes                    Run without prompts and accept defaults.
+  --target macos|linux     Target operating system.
+  --version VERSION        EasyTier version. Default: ${DEFAULT_VERSION}
+  --install-dir DIR        Install directory.
+  --username USER          Config server username. Default: ${DEFAULT_USERNAME}
+  --domain HOST            Config server domain/IP. Default: ${DEFAULT_DOMAIN}
+  --port PORT              Config server port. Default: ${DEFAULT_PORT}
+  --hostname NAME          Node hostname.
+  --web-port PORT          Web/API port. Default: ${DEFAULT_WEB_PORT}
+  --protocol udp|tcp|ws    Config server protocol. Default: ${DEFAULT_PROTOCOL}
+  --no-web                 Do not install easytier-web-embed.
+  --no-core                Do not install easytier-core.
+  --uninstall              Stop services and delete EasyTier services/files.
 EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help) usage; exit 0 ;;
+      -y|--yes|--non-interactive)
+        AUTO_YES="yes"
+        shift
+        ;;
+      --uninstall|-x)
+        ACTION="uninstall"
+        shift
+        ;;
+      --target|--os)
+        OS_NAME="$2"
+        shift 2
+        ;;
+      --version)
+        VERSION="$2"
+        shift 2
+        ;;
+      --install-dir)
+        INSTALL_DIR="$2"
+        shift 2
+        ;;
+      --username)
+        USERNAME="$2"
+        shift 2
+        ;;
+      --domain|--server)
+        DOMAIN="$2"
+        shift 2
+        ;;
+      --port)
+        PORT="$2"
+        shift 2
+        ;;
+      --hostname)
+        HOSTNAME_VALUE="$2"
+        shift 2
+        ;;
+      --web-port)
+        WEB_PORT="$2"
+        shift 2
+        ;;
+      --protocol)
+        CONFIG_PROTOCOL="$2"
+        shift 2
+        ;;
+      --no-web)
+        INSTALL_WEB="no"
+        shift
+        ;;
+      --no-core)
+        INSTALL_CORE="no"
+        shift
+        ;;
+      *)
+        error "Unknown option: $1"
+        usage
+        exit 1
+        ;;
+    esac
+  done
 }
 
 require_root() {
@@ -90,14 +174,24 @@ main_menu() {
     echo "1) Mac"
     echo "2) Linux"
     echo "3) Windows"
-    echo "4) Exit"
+    echo "4) Thorough uninstall on this machine"
+    echo "5) Exit"
     echo "========================================"
-    read -r -p "Choose target system [1-4]: " OS_CHOICE
+    read -r -p "Choose option [1-5]: " OS_CHOICE
     case "$OS_CHOICE" in
       1) OS_NAME="macos"; return ;;
       2) OS_NAME="linux"; return ;;
       3) OS_NAME="windows"; return ;;
-      4) exit 0 ;;
+      4)
+        ACTION="uninstall"
+        case "$(uname -s)" in
+          Darwin) OS_NAME="macos" ;;
+          Linux) OS_NAME="linux" ;;
+          *) error "Unsupported current system for uninstall: $(uname -s)"; exit 1 ;;
+        esac
+        return
+        ;;
+      5) exit 0 ;;
       *) warning "Invalid option." ;;
     esac
   done
@@ -167,16 +261,28 @@ default_hostname() {
 
 collect_config() {
   detect_platform
-  prompt_default VERSION "EasyTier version" "$DEFAULT_VERSION"
-  prompt_default INSTALL_DIR "Install directory" "$(default_install_dir)"
-  prompt_default USERNAME "Username" "$DEFAULT_USERNAME"
-  prompt_default DOMAIN "Config server domain/IP, without udp:// and without /username" "$DEFAULT_DOMAIN"
-  prompt_default PORT "Config server port" "$DEFAULT_PORT"
-  prompt_default HOSTNAME_VALUE "Hostname" "$(default_hostname)"
-  prompt_default WEB_PORT "Web/API port" "$DEFAULT_WEB_PORT"
-  prompt_default CONFIG_PROTOCOL "Config server protocol" "$DEFAULT_PROTOCOL"
-  prompt_yes_no INSTALL_WEB "Install easytier-web-embed service?" "y"
-  prompt_yes_no INSTALL_CORE "Install easytier-core service?" "y"
+
+  if [[ "$AUTO_YES" == "yes" ]]; then
+    VERSION="${VERSION:-$DEFAULT_VERSION}"
+    INSTALL_DIR="${INSTALL_DIR:-$(default_install_dir)}"
+    USERNAME="${USERNAME:-$DEFAULT_USERNAME}"
+    DOMAIN="${DOMAIN:-$DEFAULT_DOMAIN}"
+    PORT="${PORT:-$DEFAULT_PORT}"
+    HOSTNAME_VALUE="${HOSTNAME_VALUE:-$(default_hostname)}"
+    WEB_PORT="${WEB_PORT:-$DEFAULT_WEB_PORT}"
+    CONFIG_PROTOCOL="${CONFIG_PROTOCOL:-$DEFAULT_PROTOCOL}"
+  else
+    prompt_default VERSION "EasyTier version" "${VERSION:-$DEFAULT_VERSION}"
+    prompt_default INSTALL_DIR "Install directory" "${INSTALL_DIR:-$(default_install_dir)}"
+    prompt_default USERNAME "Username" "${USERNAME:-$DEFAULT_USERNAME}"
+    prompt_default DOMAIN "Config server domain/IP, without udp:// and without /username" "${DOMAIN:-$DEFAULT_DOMAIN}"
+    prompt_default PORT "Config server port" "${PORT:-$DEFAULT_PORT}"
+    prompt_default HOSTNAME_VALUE "Hostname" "${HOSTNAME_VALUE:-$(default_hostname)}"
+    prompt_default WEB_PORT "Web/API port" "${WEB_PORT:-$DEFAULT_WEB_PORT}"
+    prompt_default CONFIG_PROTOCOL "Config server protocol" "${CONFIG_PROTOCOL:-$DEFAULT_PROTOCOL}"
+    prompt_yes_no INSTALL_WEB "Install easytier-web-embed service?" "$INSTALL_WEB"
+    prompt_yes_no INSTALL_CORE "Install easytier-core service?" "$INSTALL_CORE"
+  fi
 
   if [[ "$INSTALL_WEB" != "yes" && "$INSTALL_CORE" != "yes" ]]; then
     error "Nothing selected to install."
@@ -205,6 +311,10 @@ confirm_config() {
   echo "Install Core:       ${INSTALL_CORE}"
   echo "=========================================="
   echo
+
+  if [[ "$AUTO_YES" == "yes" ]]; then
+    return
+  fi
 
   local ok
   prompt_yes_no ok "Confirm and start installation?" "n"
@@ -376,6 +486,67 @@ install_macos_services() {
   fi
 }
 
+uninstall_linux() {
+  local dir
+  dir="${INSTALL_DIR:-$(default_install_dir)}"
+
+  info "Stopping and deleting Linux EasyTier services..."
+  systemctl stop easytier-core.service 2>/dev/null || true
+  systemctl stop easytier-web-embed.service 2>/dev/null || true
+  systemctl stop easytier.service 2>/dev/null || true
+  systemctl disable easytier-core.service 2>/dev/null || true
+  systemctl disable easytier-web-embed.service 2>/dev/null || true
+  systemctl disable easytier.service 2>/dev/null || true
+  rm -f /etc/systemd/system/easytier-core.service
+  rm -f /etc/systemd/system/easytier-web-embed.service
+  rm -f /etc/systemd/system/easytier.service
+  systemctl daemon-reload
+  systemctl reset-failed 2>/dev/null || true
+
+  info "Deleting ${dir}..."
+  rm -rf "$dir"
+  success "EasyTier has been fully uninstalled from Linux."
+}
+
+uninstall_macos() {
+  local dir
+  dir="${INSTALL_DIR:-$(default_install_dir)}"
+
+  info "Stopping and deleting macOS EasyTier LaunchDaemons..."
+  launchctl bootout system /Library/LaunchDaemons/easytier-core.plist 2>/dev/null || true
+  launchctl bootout system /Library/LaunchDaemons/easytier-web-embed.plist 2>/dev/null || true
+  launchctl bootout system /Library/LaunchDaemons/easytier.plist 2>/dev/null || true
+  rm -f /Library/LaunchDaemons/easytier-core.plist
+  rm -f /Library/LaunchDaemons/easytier-web-embed.plist
+  rm -f /Library/LaunchDaemons/easytier.plist
+
+  info "Deleting ${dir}..."
+  rm -rf "$dir"
+  rm -f /var/log/easytier-core.log /var/log/easytier-web-embed.log /var/log/easytier.log
+  success "EasyTier has been fully uninstalled from macOS."
+}
+
+run_uninstall() {
+  validate_os
+  require_root
+  if [[ -z "$INSTALL_DIR" && "$AUTO_YES" != "yes" ]]; then
+    prompt_default INSTALL_DIR "Install directory to delete" "$(default_install_dir)"
+    local ok
+    prompt_yes_no ok "Confirm full uninstall and delete ${INSTALL_DIR}?" "n"
+    if [[ "$ok" != "yes" ]]; then
+      warning "Uninstall cancelled."
+      exit 0
+    fi
+  fi
+
+  if [[ "$OS_NAME" == "linux" ]]; then
+    require_cmd systemctl
+    uninstall_linux
+  else
+    uninstall_macos
+  fi
+}
+
 run_install() {
   validate_os
   require_root
@@ -410,13 +581,25 @@ run_install() {
 }
 
 main() {
-  case "${1:-}" in
-    -h|--help) usage; exit 0 ;;
-    *) ;;
-  esac
+  parse_args "$@"
 
-  main_menu
-  run_install
+  if [[ -z "$OS_NAME" ]]; then
+    if [[ "$AUTO_YES" == "yes" ]]; then
+      case "$(uname -s)" in
+        Darwin) OS_NAME="macos" ;;
+        Linux) OS_NAME="linux" ;;
+        *) error "Cannot auto-detect target OS. Use --target macos or --target linux."; exit 1 ;;
+      esac
+    else
+      main_menu
+    fi
+  fi
+
+  if [[ "$ACTION" == "uninstall" ]]; then
+    run_uninstall
+  else
+    run_install
+  fi
 }
 
 main "$@"
