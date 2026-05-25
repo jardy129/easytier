@@ -69,8 +69,8 @@ C:\Program Files\EasyTier
 When prompted for config server address, enter only host and port:
 
 ```text
-192.168.2.2:22020
-jardy.top:22020
+192.168.x.x:22020
+aaa.com:22020
 ```
 
 Do not include `udp://` or `/username`; the scripts add those automatically.
