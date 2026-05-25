@@ -1,10 +1,22 @@
 # EasyTier Installers
 
-Interactive installers for EasyTier Core and EasyTier Web Embed.
+Interactive and unattended installers for EasyTier Core and EasyTier CLI.
 
-## Recommended Scripts
+The install directory is rebuilt during installation and will contain only:
 
-### macOS / Linux
+```text
+easytier-core
+easytier-cli
+```
+
+On Windows:
+
+```text
+easytier-core.exe
+easytier-cli.exe
+```
+
+## macOS / Linux
 
 Run on the target machine:
 
@@ -64,18 +76,6 @@ The script starts with this menu:
 5) Exit
 ```
 
-For macOS and Linux it will:
-
-```text
-Detect x86_64/aarch64/arm automatically
-Download the matching EasyTier release zip
-Ask for install directory
-Ask for domain/IP, port, username, hostname
-Ask whether to install easytier-web-embed and easytier-core
-Show a confirmation page before installing
-Create auto-start services
-```
-
 Default install directories:
 
 ```text
@@ -83,7 +83,7 @@ macOS: /usr/local/bin/easytier
 Linux: /etc/easytier
 ```
 
-### Windows
+## Windows
 
 Run PowerShell as Administrator:
 
@@ -103,8 +103,6 @@ Unattended Windows full uninstall:
 powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.ps1 -OutFile $env:TEMP\install-easytier.ps1; & $env:TEMP\install-easytier.ps1 -Yes -Uninstall"
 ```
 
-The Windows script uses the same menu and confirmation flow. It detects `x86_64`, `arm64`, or `i686`, downloads the matching Windows zip, and installs Windows services.
-
 Default install directory:
 
 ```text
@@ -117,7 +115,7 @@ When prompted for the config server domain/IP, enter only the host:
 
 ```text
 192.168.x.x
-aaa.com
+example.com
 ```
 
 When prompted for the port, enter only the port:
@@ -135,28 +133,25 @@ udp://<domain>:<port>/<username>
 Example:
 
 ```text
-udp://192.168.x.x:22020/xxxxx
+udp://192.168.x.x:22020/your-user
 ```
 
-## Generated Services
+## Generated Service
 
 Linux:
 
 ```text
-easytier-web-embed.service
 easytier-core.service
 ```
 
 macOS:
 
 ```text
-/Library/LaunchDaemons/easytier-web-embed.plist
 /Library/LaunchDaemons/easytier-core.plist
 ```
 
 Windows:
 
 ```text
-easytier-web-embed
 easytier-core
 ```
