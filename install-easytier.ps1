@@ -19,8 +19,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $DefaultVersion = "2.6.4"
-$DefaultUsername = "jardy"
-$DefaultDomain = "192.168.2.2"
+$DefaultUsername = "your-user"
+$DefaultDomain = "your-server.example.com"
 $DefaultPort = "22020"
 $DefaultWebPort = "11211"
 $DefaultProtocol = "udp"
@@ -36,7 +36,7 @@ function Show-Help {
     @"
 Usage:
   powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1
-  powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1 -Yes -Target Windows -Username jardy -Domain 192.168.2.2 -Port 22020 -Hostname WinNode
+  powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1 -Yes -Target Windows -Username your-user -Domain your-server.example.com -Port 22020 -Hostname your-windows-node
   powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1 -Yes -Uninstall
 
 This script installs EasyTier Core and EasyTier Web Embed as Windows services.

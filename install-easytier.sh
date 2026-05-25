@@ -13,8 +13,8 @@ warning() { echo -e "${YELLOW}$*${NC}"; }
 error() { echo -e "${RED}$*${NC}" >&2; }
 
 DEFAULT_VERSION="2.6.4"
-DEFAULT_USERNAME="jardy"
-DEFAULT_DOMAIN="192.168.2.2"
+DEFAULT_USERNAME="your-user"
+DEFAULT_DOMAIN="your-server.example.com"
 DEFAULT_PORT="22020"
 DEFAULT_WEB_PORT="11211"
 DEFAULT_PROTOCOL="udp"
@@ -39,8 +39,8 @@ usage() {
   cat <<EOF
 Usage:
   sudo ./install-easytier.sh
-  sudo ./install-easytier.sh --yes --target linux --username jardy --domain 192.168.2.2 --port 22020 --hostname pve
-  sudo ./install-easytier.sh --yes --target macos --username jardy --domain jardy.top --port 22020 --hostname MacBook-Mini
+  sudo ./install-easytier.sh --yes --target linux --username your-user --domain your-server.example.com --port 22020 --hostname your-linux-node
+  sudo ./install-easytier.sh --yes --target macos --username your-user --domain your-server.example.com --port 22020 --hostname your-mac-node
   sudo ./install-easytier.sh --yes --target linux --uninstall
 
 This script installs EasyTier Core and EasyTier Web Embed on macOS or Linux.

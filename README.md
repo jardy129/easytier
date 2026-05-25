@@ -18,10 +18,10 @@ Unattended Linux example:
 curl -fsSL https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.sh | sudo bash -s -- \
   --yes \
   --target linux \
-  --username jardy \
-  --domain 192.168.2.2 \
+  --username your-user \
+  --domain your-server.example.com \
   --port 22020 \
-  --hostname pve
+  --hostname your-linux-node
 ```
 
 Unattended Linux full uninstall:
@@ -39,10 +39,10 @@ Unattended macOS example:
 curl -fsSL https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.sh | sudo bash -s -- \
   --yes \
   --target macos \
-  --username jardy \
-  --domain 192.168.2.2 \
+  --username your-user \
+  --domain your-server.example.com \
   --port 22020 \
-  --hostname MacBook-Mini
+  --hostname your-mac-node
 ```
 
 Unattended macOS full uninstall:
@@ -94,7 +94,7 @@ powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1
 Unattended Windows example:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.ps1 -OutFile $env:TEMP\install-easytier.ps1; & $env:TEMP\install-easytier.ps1 -Yes -Target Windows -Username jardy -Domain 192.168.2.2 -Port 22020 -Hostname WinNode"
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/jardy129/easytier/main/install-easytier.ps1 -OutFile $env:TEMP\install-easytier.ps1; & $env:TEMP\install-easytier.ps1 -Yes -Target Windows -Username your-user -Domain your-server.example.com -Port 22020 -Hostname your-windows-node"
 ```
 
 Unattended Windows full uninstall:
