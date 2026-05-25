@@ -61,8 +61,8 @@ C:\easytier
 When prompted for the config server domain/IP, enter only the host:
 
 ```text
-192.168.2.2
-jardy.top
+192.168.x.x
+aaa.com
 ```
 
 When prompted for the port, enter only the port:
@@ -80,7 +80,7 @@ udp://<domain>:<port>/<username>
 Example:
 
 ```text
-udp://192.168.2.2:22020/jardy
+udp://192.168.x.x:22020/xxxxx
 ```
 
 ## Generated Services
