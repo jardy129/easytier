@@ -17,6 +17,8 @@ DEFAULT_USERNAME="your-user"
 DEFAULT_DOMAIN="your-server.example.com"
 DEFAULT_PORT="22020"
 DEFAULT_PROTOCOL="udp"
+DEFAULT_WEB_PORT="11211"
+DEFAULT_WEB_API_HOST="http://127.0.0.1:11211"
 
 ACTION="install"
 AUTO_YES="no"
@@ -29,18 +31,25 @@ DOMAIN=""
 PORT=""
 HOSTNAME_VALUE=""
 CONFIG_PROTOCOL=""
+INSTALL_WEB="no"
+WEB_PORT=""
+WEB_API_HOST=""
 
 usage() {
   cat <<EOF
 Usage:
   sudo ./install-easytier.sh
   sudo ./install-easytier.sh --yes --target linux --username your-user --domain your-server.example.com --port 22020 --hostname your-linux-node
+  sudo ./install-easytier.sh --yes --target linux --with-web --username your-user --domain your-server.example.com --port 22020 --hostname your-linux-node
   sudo ./install-easytier.sh --yes --target macos --username your-user --domain your-server.example.com --port 22020 --hostname your-mac-node
   sudo ./install-easytier.sh --yes --target linux --uninstall
 
-Installs only these files into the install directory:
+默认只安装:
   easytier-core
   easytier-cli
+
+加 --with-web 时额外安装:
+  easytier-web-embed
 
 Options:
   --yes                    Run without prompts and accept defaults.
@@ -52,6 +61,9 @@ Options:
   --port PORT              Config server port. Default: ${DEFAULT_PORT}
   --hostname NAME          Node hostname.
   --protocol udp|tcp|ws    Config server protocol. Default: ${DEFAULT_PROTOCOL}
+  --with-web               Install easytier-web-embed and create web service.
+  --web-port PORT          Web/API port. Default: ${DEFAULT_WEB_PORT}
+  --api-host URL           API URL used by web frontend. Default: ${DEFAULT_WEB_API_HOST}
   --uninstall              Stop services and delete EasyTier services/files.
 EOF
 }
@@ -70,6 +82,9 @@ parse_args() {
       --port) PORT="$2"; shift 2 ;;
       --hostname) HOSTNAME_VALUE="$2"; shift 2 ;;
       --protocol) CONFIG_PROTOCOL="$2"; shift 2 ;;
+      --with-web) INSTALL_WEB="yes"; shift ;;
+      --web-port) WEB_PORT="$2"; shift 2 ;;
+      --api-host) WEB_API_HOST="$2"; shift 2 ;;
       *) error "Unknown option: $1"; usage; exit 1 ;;
     esac
   done
@@ -112,19 +127,19 @@ main_menu() {
   local choice
   while true; do
     echo
-    echo "========== EasyTier Installer =========="
-    echo "1) Mac"
-    echo "2) Linux"
-    echo "3) Windows"
-    echo "4) Thorough uninstall on this machine"
-    echo "5) Exit"
+    echo "========== EasyTier 安装器 =========="
+    echo "1) 安装到 Mac"
+    echo "2) 安装到 Linux"
+    echo "3) 安装到 Windows"
+    echo "4) 彻底卸载本机 EasyTier"
+    echo "5) 退出"
     echo "========================================"
-    read -r -p "Choose option [1-5]: " choice
+    read -r -p "请选择 [1-5]: " choice
     case "$choice" in
       1) OS_NAME="macos"; return ;;
       2) OS_NAME="linux"; return ;;
       3)
-        warning "Windows installation should be run from Administrator PowerShell:"
+        warning "Windows 请使用管理员 PowerShell 运行:"
         echo "  powershell -ExecutionPolicy Bypass -File .\\install-easytier.ps1"
         exit 0
         ;;
@@ -138,7 +153,7 @@ main_menu() {
         return
         ;;
       5) exit 0 ;;
-      *) warning "Invalid option." ;;
+      *) warning "无效选项。" ;;
     esac
   done
 }
@@ -159,11 +174,11 @@ validate_os() {
   local actual
   actual="$(uname -s)"
   if [[ "$OS_NAME" == "macos" && "$actual" != "Darwin" ]]; then
-    error "You chose Mac, but current system is ${actual}."
+    error "你选择了 Mac，但当前系统是 ${actual}。"
     exit 1
   fi
   if [[ "$OS_NAME" == "linux" && "$actual" != "Linux" ]]; then
-    error "You chose Linux, but current system is ${actual}."
+    error "你选择了 Linux，但当前系统是 ${actual}。"
     exit 1
   fi
 }
@@ -200,14 +215,22 @@ collect_config() {
     HOSTNAME_VALUE="${HOSTNAME_VALUE:-$(default_hostname)}"
     CONFIG_PROTOCOL="${CONFIG_PROTOCOL:-$DEFAULT_PROTOCOL}"
   else
-    prompt_default VERSION "EasyTier version" "${VERSION:-$DEFAULT_VERSION}"
-    prompt_default INSTALL_DIR "Install directory" "${INSTALL_DIR:-$(default_install_dir)}"
-    prompt_default USERNAME "Username" "${USERNAME:-$DEFAULT_USERNAME}"
-    prompt_default DOMAIN "Config server domain/IP, without protocol and username" "${DOMAIN:-$DEFAULT_DOMAIN}"
-    prompt_default PORT "Config server port" "${PORT:-$DEFAULT_PORT}"
-    prompt_default HOSTNAME_VALUE "Hostname" "${HOSTNAME_VALUE:-$(default_hostname)}"
-    prompt_default CONFIG_PROTOCOL "Config server protocol" "${CONFIG_PROTOCOL:-$DEFAULT_PROTOCOL}"
+    prompt_default VERSION "EasyTier 版本" "${VERSION:-$DEFAULT_VERSION}"
+    prompt_default INSTALL_DIR "安装目录" "${INSTALL_DIR:-$(default_install_dir)}"
+    prompt_default USERNAME "用户名" "${USERNAME:-$DEFAULT_USERNAME}"
+    prompt_default DOMAIN "配置服务器域名/IP，不含协议和用户名" "${DOMAIN:-$DEFAULT_DOMAIN}"
+    prompt_default PORT "配置服务器端口" "${PORT:-$DEFAULT_PORT}"
+    prompt_default HOSTNAME_VALUE "主机名" "${HOSTNAME_VALUE:-$(default_hostname)}"
+    prompt_default CONFIG_PROTOCOL "配置服务器协议" "${CONFIG_PROTOCOL:-$DEFAULT_PROTOCOL}"
+    prompt_yes_no INSTALL_WEB "是否额外安装 easytier-web-embed Web 服务？" "$INSTALL_WEB"
+    if [[ "$INSTALL_WEB" == "yes" ]]; then
+      prompt_default WEB_PORT "Web/API 端口" "${WEB_PORT:-$DEFAULT_WEB_PORT}"
+      prompt_default WEB_API_HOST "Web 前端使用的 API 地址" "${WEB_API_HOST:-$DEFAULT_WEB_API_HOST}"
+    fi
   fi
+
+  WEB_PORT="${WEB_PORT:-$DEFAULT_WEB_PORT}"
+  WEB_API_HOST="${WEB_API_HOST:-$DEFAULT_WEB_API_HOST}"
 }
 
 confirm_config() {
@@ -216,15 +239,21 @@ confirm_config() {
   config_server="${CONFIG_PROTOCOL}://${DOMAIN}:${PORT}/${USERNAME}"
 
   echo
-  echo "========== Confirm Installation =========="
-  echo "Target OS:          ${OS_NAME}"
-  echo "Architecture:       ${PLATFORM}"
-  echo "Download package:   ${package_name}"
-  echo "Install directory:  ${INSTALL_DIR}"
-  echo "Files kept:         easytier-core, easytier-cli"
-  echo "Username:           ${USERNAME}"
-  echo "Config server:      ${config_server}"
-  echo "Hostname:           ${HOSTNAME_VALUE}"
+  echo "========== 确认安装配置 =========="
+  echo "目标系统:           ${OS_NAME}"
+  echo "系统架构:           ${PLATFORM}"
+  echo "下载文件:           ${package_name}"
+  echo "安装目录:           ${INSTALL_DIR}"
+  echo "基础文件:           easytier-core, easytier-cli"
+  echo "安装 Web 服务:      ${INSTALL_WEB}"
+  if [[ "$INSTALL_WEB" == "yes" ]]; then
+    echo "Web 文件:           easytier-web-embed"
+    echo "Web/API 端口:       ${WEB_PORT}"
+    echo "Web API 地址:       ${WEB_API_HOST}"
+  fi
+  echo "用户名:             ${USERNAME}"
+  echo "配置服务器:         ${config_server}"
+  echo "主机名:             ${HOSTNAME_VALUE}"
   echo "=========================================="
   echo
 
@@ -232,9 +261,9 @@ confirm_config() {
     return
   fi
 
-  prompt_yes_no ok "Confirm and start installation?" "n"
+  prompt_yes_no ok "确认并开始安装？" "n"
   if [[ "$ok" != "yes" ]]; then
-    warning "Installation cancelled."
+    warning "已取消安装。"
     exit 0
   fi
 }
@@ -277,6 +306,9 @@ download_package() {
   mkdir -p "$INSTALL_DIR"
   install -m 0755 "${extract_dir}/easytier-core" "${INSTALL_DIR}/easytier-core"
   install -m 0755 "${extract_dir}/easytier-cli" "${INSTALL_DIR}/easytier-cli"
+  if [[ "$INSTALL_WEB" == "yes" ]]; then
+    install -m 0755 "${extract_dir}/easytier-web-embed" "${INSTALL_DIR}/easytier-web-embed"
+  fi
 
   if [[ "$OS_NAME" == "macos" ]]; then
     xattr -dr com.apple.quarantine "$INSTALL_DIR" 2>/dev/null || true
@@ -312,6 +344,29 @@ EOF
 
   systemctl daemon-reload
   systemctl enable --now easytier-core.service
+}
+
+install_linux_web_service() {
+  local web_service="/etc/systemd/system/easytier-web-embed.service"
+  cat > "$web_service" <<EOF
+[Unit]
+Description=EasyTier Web Embed Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/easytier-web-embed --db ${INSTALL_DIR}/et.db --api-server-port ${WEB_PORT} --api-server-addr 0.0.0.0 --api-host ${WEB_API_HOST} --config-server-port ${PORT} --config-server-protocol ${CONFIG_PROTOCOL}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now easytier-web-embed.service
 }
 
 write_macos_plist() {
@@ -350,6 +405,43 @@ EOF
   chmod 644 "$plist_path"
   launchctl bootstrap system "$plist_path"
   launchctl kickstart -k system/easytier-core
+}
+
+write_macos_web_plist() {
+  local plist_path="/Library/LaunchDaemons/easytier-web-embed.plist"
+  cat > "$plist_path" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>easytier-web-embed</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${INSTALL_DIR}/easytier-web-embed</string>
+    <string>--db</string><string>${INSTALL_DIR}/et.db</string>
+    <string>--api-server-port</string><string>${WEB_PORT}</string>
+    <string>--api-server-addr</string><string>0.0.0.0</string>
+    <string>--api-host</string><string>${WEB_API_HOST}</string>
+    <string>--config-server-port</string><string>${PORT}</string>
+    <string>--config-server-protocol</string><string>${CONFIG_PROTOCOL}</string>
+  </array>
+  <key>WorkingDirectory</key><string>${INSTALL_DIR}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key><string>/var/root</string>
+    <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/var/log/easytier-web-embed.log</string>
+  <key>StandardErrorPath</key><string>/var/log/easytier-web-embed.log</string>
+</dict>
+</plist>
+EOF
+  chown root:wheel "$plist_path"
+  chmod 644 "$plist_path"
+  launchctl bootstrap system "$plist_path"
+  launchctl kickstart -k system/easytier-web-embed
 }
 
 run_uninstall() {
@@ -398,14 +490,16 @@ run_install() {
 
   if [[ "$OS_NAME" == "linux" ]]; then
     install_linux_service
+    [[ "$INSTALL_WEB" == "yes" ]] && install_linux_web_service
   else
     write_macos_plist
+    [[ "$INSTALL_WEB" == "yes" ]] && write_macos_web_plist
   fi
 
-  success "Installation completed."
-  echo "Install directory contains:"
+  success "安装完成。"
+  echo "安装目录内容:"
   ls -la "$INSTALL_DIR"
-  echo "Check service:"
+  echo "检查服务:"
   if [[ "$OS_NAME" == "linux" ]]; then
     echo "  systemctl status easytier-core.service"
   else

@@ -10,7 +10,10 @@ param(
     [string]$Domain = "",
     [string]$Port = "",
     [string]$Hostname = "",
-    [string]$Protocol = ""
+    [string]$Protocol = "",
+    [switch]$WithWeb,
+    [string]$WebPort = "",
+    [string]$ApiHost = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,8 +23,10 @@ $DefaultUsername = "your-user"
 $DefaultDomain = "your-server.example.com"
 $DefaultPort = "22020"
 $DefaultProtocol = "udp"
+$DefaultWebPort = "11211"
+$DefaultApiHost = "http://127.0.0.1:11211"
 $CoreService = "easytier-core"
-$LegacyWebService = "easytier-web-embed"
+$WebService = "easytier-web-embed"
 
 function Write-Info($Message) { Write-Host $Message -ForegroundColor Cyan }
 function Write-Success($Message) { Write-Host $Message -ForegroundColor Green }
@@ -33,11 +38,15 @@ function Show-Help {
 Usage:
   powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1
   powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1 -Yes -Target Windows -Username your-user -Domain your-server.example.com -Port 22020 -Hostname your-windows-node
+  powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1 -Yes -WithWeb -Target Windows -Username your-user -Domain your-server.example.com -Port 22020 -Hostname your-windows-node
   powershell -ExecutionPolicy Bypass -File .\install-easytier.ps1 -Yes -Uninstall
 
-Installs only these files into the install directory:
+默认安装:
   easytier-core.exe
   easytier-cli.exe
+
+加 -WithWeb 时额外安装:
+  easytier-web-embed.exe
 "@ | Write-Host
 }
 
@@ -63,7 +72,7 @@ function Prompt-YesNo($Question, $Default) {
         switch -Regex ($answer) {
             "^(y|yes|Y|YES)$" { return $true }
             "^(n|no|N|NO)$" { return $false }
-            default { Write-Warn "Please enter y or n." }
+            default { Write-Warn "请输入 y 或 n。" }
         }
     }
 }
@@ -71,29 +80,29 @@ function Prompt-YesNo($Question, $Default) {
 function Main-Menu {
     while ($true) {
         Write-Host ""
-        Write-Host "========== EasyTier Installer =========="
-        Write-Host "1) Mac"
-        Write-Host "2) Linux"
-        Write-Host "3) Windows"
-        Write-Host "4) Thorough uninstall on this machine"
-        Write-Host "5) Exit"
+        Write-Host "========== EasyTier 安装器 =========="
+        Write-Host "1) 安装到 Mac"
+        Write-Host "2) 安装到 Linux"
+        Write-Host "3) 安装到 Windows"
+        Write-Host "4) 彻底卸载本机 EasyTier"
+        Write-Host "5) 退出"
         Write-Host "========================================"
-        $choice = Read-Host "Choose option [1-5]"
+        $choice = Read-Host "请选择 [1-5]"
         switch ($choice) {
             "1" {
-                Write-Warn "Mac installation should be run on macOS:"
+                Write-Warn "Mac 请在 macOS 上运行:"
                 Write-Host "  sudo ./install-easytier.sh"
                 exit 0
             }
             "2" {
-                Write-Warn "Linux installation should be run on Linux:"
+                Write-Warn "Linux 请在 Linux 上运行:"
                 Write-Host "  sudo ./install-easytier.sh"
                 exit 0
             }
             "3" { return }
             "4" { $script:Uninstall = $true; return }
             "5" { exit 0 }
-            default { Write-Warn "Invalid option." }
+            default { Write-Warn "无效选项。" }
         }
     }
 }
@@ -129,14 +138,21 @@ function Collect-Config {
         if ([string]::IsNullOrWhiteSpace($Port)) { $script:Port = $DefaultPort }
         if ([string]::IsNullOrWhiteSpace($Hostname)) { $script:Hostname = $env:COMPUTERNAME }
         if ([string]::IsNullOrWhiteSpace($Protocol)) { $script:Protocol = $DefaultProtocol }
+        if ([string]::IsNullOrWhiteSpace($WebPort)) { $script:WebPort = $DefaultWebPort }
+        if ([string]::IsNullOrWhiteSpace($ApiHost)) { $script:ApiHost = $DefaultApiHost }
     } else {
-        $script:InstallDir = Prompt-Default "Install directory" "C:\easytier"
-        $script:Version = Prompt-Default "EasyTier version" $DefaultVersion
-        $script:Username = Prompt-Default "Username" $DefaultUsername
-        $script:Domain = Prompt-Default "Config server domain/IP, without protocol and username" $DefaultDomain
-        $script:Port = Prompt-Default "Config server port" $DefaultPort
-        $script:Hostname = Prompt-Default "Hostname" $env:COMPUTERNAME
-        $script:Protocol = Prompt-Default "Config server protocol" $DefaultProtocol
+        $script:InstallDir = Prompt-Default "安装目录" "C:\easytier"
+        $script:Version = Prompt-Default "EasyTier 版本" $DefaultVersion
+        $script:Username = Prompt-Default "用户名" $DefaultUsername
+        $script:Domain = Prompt-Default "配置服务器域名/IP，不含协议和用户名" $DefaultDomain
+        $script:Port = Prompt-Default "配置服务器端口" $DefaultPort
+        $script:Hostname = Prompt-Default "主机名" $env:COMPUTERNAME
+        $script:Protocol = Prompt-Default "配置服务器协议" $DefaultProtocol
+        $script:WithWeb = Prompt-YesNo "是否额外安装 easytier-web-embed Web 服务？" "n"
+        if ($WithWeb) {
+            $script:WebPort = Prompt-Default "Web/API 端口" $DefaultWebPort
+            $script:ApiHost = Prompt-Default "Web 前端使用的 API 地址" $DefaultApiHost
+        }
     }
 }
 
@@ -145,20 +161,26 @@ function Confirm-Config($Platform) {
     $configServer = "${Protocol}://${Domain}:${Port}/${Username}"
 
     Write-Host ""
-    Write-Host "========== Confirm Installation =========="
-    Write-Host "Target OS:          windows"
-    Write-Host "Architecture:       $Platform"
-    Write-Host "Download package:   $asset"
-    Write-Host "Install directory:  $InstallDir"
-    Write-Host "Files kept:         easytier-core.exe, easytier-cli.exe"
-    Write-Host "Username:           $Username"
-    Write-Host "Config server:      $configServer"
-    Write-Host "Hostname:           $Hostname"
+    Write-Host "========== 确认安装配置 =========="
+    Write-Host "目标系统:           windows"
+    Write-Host "系统架构:           $Platform"
+    Write-Host "下载文件:           $asset"
+    Write-Host "安装目录:           $InstallDir"
+    Write-Host "基础文件:           easytier-core.exe, easytier-cli.exe"
+    Write-Host "安装 Web 服务:      $WithWeb"
+    if ($WithWeb) {
+        Write-Host "Web 文件:           easytier-web-embed.exe"
+        Write-Host "Web/API 端口:       $WebPort"
+        Write-Host "Web API 地址:       $ApiHost"
+    }
+    Write-Host "用户名:             $Username"
+    Write-Host "配置服务器:         $configServer"
+    Write-Host "主机名:             $Hostname"
     Write-Host "=========================================="
     Write-Host ""
 
-    if (-not $Yes -and -not (Prompt-YesNo "Confirm and start installation?" "n")) {
-        Write-Warn "Installation cancelled."
+    if (-not $Yes -and -not (Prompt-YesNo "确认并开始安装？" "n")) {
+        Write-Warn "已取消安装。"
         exit 0
     }
 }
@@ -181,6 +203,9 @@ function Download-Install($Platform) {
 
     Copy-Item (Join-Path $extractDir "easytier-core.exe") (Join-Path $InstallDir "easytier-core.exe") -Force
     Copy-Item (Join-Path $extractDir "easytier-cli.exe") (Join-Path $InstallDir "easytier-cli.exe") -Force
+    if ($WithWeb) {
+        Copy-Item (Join-Path $extractDir "easytier-web-embed.exe") (Join-Path $InstallDir "easytier-web-embed.exe") -Force
+    }
 
     Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -192,7 +217,7 @@ function Install-EasyTier {
     Confirm-Config $platform
 
     Stop-RemoveService $CoreService
-    Stop-RemoveService $LegacyWebService
+    Stop-RemoveService $WebService
     Download-Install $platform
 
     $coreExe = Join-Path $InstallDir "easytier-core.exe"
@@ -207,30 +232,46 @@ function Install-EasyTier {
     New-Service -Name $CoreService -BinaryPathName $coreArgs -DisplayName "EasyTier Core" -StartupType Automatic | Out-Null
     Start-Service -Name $CoreService
 
-    Write-Success "Installation completed."
-    Write-Host "Install directory contains:"
+    if ($WithWeb) {
+        $webExe = Join-Path $InstallDir "easytier-web-embed.exe"
+        $dbPath = Join-Path $InstallDir "et.db"
+        $webArgs = @(
+            Quote-Arg $webExe,
+            "--db", Quote-Arg $dbPath,
+            "--api-server-port", $WebPort,
+            "--api-server-addr", "0.0.0.0",
+            "--api-host", Quote-Arg $ApiHost,
+            "--config-server-port", $Port,
+            "--config-server-protocol", $Protocol
+        ) -join " "
+        New-Service -Name $WebService -BinaryPathName $webArgs -DisplayName "EasyTier Web Embed" -StartupType Automatic | Out-Null
+        Start-Service -Name $WebService
+    }
+
+    Write-Success "安装完成。"
+    Write-Host "安装目录内容:"
     Get-ChildItem -LiteralPath $InstallDir
-    Write-Host "Check:"
+    Write-Host "检查:"
     Write-Host "  Get-Service easytier-core"
 }
 
 function Uninstall-EasyTier {
     if ([string]::IsNullOrWhiteSpace($InstallDir)) { $InstallDir = "C:\easytier" }
     if (-not $Yes) {
-        $script:InstallDir = Prompt-Default "Install directory to delete" $InstallDir
-        if (-not (Prompt-YesNo "Confirm full uninstall and delete $InstallDir ?" "n")) {
-            Write-Warn "Uninstall cancelled."
+        $script:InstallDir = Prompt-Default "要删除的安装目录" $InstallDir
+        if (-not (Prompt-YesNo "确认彻底卸载并删除 $InstallDir ?" "n")) {
+            Write-Warn "已取消卸载。"
             exit 0
         }
     }
 
-    Write-Info "Stopping and deleting Windows EasyTier services..."
+    Write-Info "正在停止并删除 Windows EasyTier 服务..."
     Stop-RemoveService $CoreService
-    Stop-RemoveService $LegacyWebService
+    Stop-RemoveService $WebService
 
-    Write-Info "Deleting $InstallDir..."
+    Write-Info "正在删除 $InstallDir..."
     Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Success "EasyTier has been fully uninstalled from Windows."
+    Write-Success "Windows EasyTier 已彻底卸载。"
 }
 
 if ($Help) {
